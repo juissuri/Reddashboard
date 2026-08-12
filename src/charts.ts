@@ -9,21 +9,15 @@ function svgEl<K extends keyof SVGElementTagNameMap>(
 	return el;
 }
 
-/**
- * Shows a shimmering skeleton placeholder inside `container`, then calls
- * `render` once the simulated load finishes and swaps it in.
- */
 export function withSkeleton(
 	container: HTMLElement,
-	kind: "circle" | "bars" | "line",
+	kind: "bars" | "line",
 	render: () => void,
 	delay = 500
 ): void {
 	container.empty();
 	const skeleton = container.createDiv({ cls: `ndd-skeleton ndd-skeleton-${kind}` });
-	if (kind === "circle") {
-		skeleton.createDiv({ cls: "ndd-skeleton-circle" });
-	} else if (kind === "bars") {
+	if (kind === "bars") {
 		for (let i = 0; i < 3; i++) skeleton.createDiv({ cls: "ndd-skeleton-bar" });
 	} else {
 		skeleton.createDiv({ cls: "ndd-skeleton-line" });
@@ -35,78 +29,6 @@ export function withSkeleton(
 	}, delay);
 }
 
-/** Animated circular "done today" ring with a counting percentage label. */
-export function renderCircularProgress(
-	container: HTMLElement,
-	percent: number,
-	doneCount: number,
-	totalCount: number
-): void {
-	const size = 148;
-	const stroke = 12;
-	const radius = (size - stroke) / 2;
-	const circumference = 2 * Math.PI * radius;
-
-	const wrap = container.createDiv({ cls: "ndd-circular" });
-	const svg = svgEl("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}` });
-
-	const defs = svgEl("defs");
-	const filter = svgEl("filter", { id: "ndd-glow" });
-	filter.appendChild(svgEl("feGaussianBlur", { stdDeviation: "3.2", result: "blur" }));
-	const merge = svgEl("feMerge");
-	merge.appendChild(svgEl("feMergeNode", { in: "blur" }));
-	merge.appendChild(svgEl("feMergeNode", { in: "SourceGraphic" }));
-	filter.appendChild(merge);
-	defs.appendChild(filter);
-	svg.appendChild(defs);
-
-	const track = svgEl("circle", {
-		cx: size / 2,
-		cy: size / 2,
-		r: radius,
-		class: "ndd-ring-track",
-		"stroke-width": stroke,
-	});
-	svg.appendChild(track);
-
-	const ring = svgEl("circle", {
-		cx: size / 2,
-		cy: size / 2,
-		r: radius,
-		class: "ndd-ring-fill",
-		"stroke-width": stroke,
-		"stroke-dasharray": circumference,
-		"stroke-dashoffset": circumference,
-		filter: "url(#ndd-glow)",
-	});
-	ring.setAttribute("transform", `rotate(-90 ${size / 2} ${size / 2})`);
-	svg.appendChild(ring);
-	wrap.appendChild(svg);
-
-	const label = wrap.createDiv({ cls: "ndd-circular-label" });
-	const numberEl = label.createSpan({ cls: "ndd-circular-number", text: "0%" });
-	label.createDiv({ cls: "ndd-circular-sub", text: `${doneCount}/${totalCount} done today` });
-
-	// Trigger the stroke animation on the next frame so the transition fires.
-	requestAnimationFrame(() => {
-		const offset = circumference - (percent / 100) * circumference;
-		ring.style.transition = "stroke-dashoffset 1.1s cubic-bezier(0.22, 1, 0.36, 1)";
-		ring.style.strokeDashoffset = String(offset);
-	});
-
-	// Animate the numeric counter in step with the ring.
-	const duration = 1100;
-	const start = performance.now();
-	function tick(now: number) {
-		const t = Math.min(1, (now - start) / duration);
-		const eased = 1 - Math.pow(1 - t, 3);
-		numberEl.setText(`${Math.round(eased * percent)}%`);
-		if (t < 1) requestAnimationFrame(tick);
-	}
-	requestAnimationFrame(tick);
-}
-
-/** Horizontal progress bars, one per sub-project, filling with an elastic ease. */
 export function renderHorizontalBars(
 	container: HTMLElement,
 	bars: { label: string; percent: number }[]
@@ -139,7 +61,6 @@ export function renderHorizontalBars(
 	}
 }
 
-/** 7-day "tasks completed per day" line chart with a glowing drawn-in line. */
 export function renderWeeklyTrend(
 	container: HTMLElement,
 	points: { day: string; count: number }[]
@@ -191,7 +112,6 @@ export function renderWeeklyTrend(
 	const legend = wrap.createDiv({ cls: "ndd-trend-legend" });
 	for (const p of points) legend.createSpan({ text: p.day });
 
-	// Draw-in animation via dash offset.
 	requestAnimationFrame(() => {
 		try {
 			const len = (path as SVGPathElement).getTotalLength();
@@ -201,8 +121,6 @@ export function renderWeeklyTrend(
 			requestAnimationFrame(() => {
 				path.style.strokeDashoffset = "0";
 			});
-		} catch {
-			// getTotalLength can fail on a zero-length path; ignore.
-		}
+		} catch {}
 	});
 }

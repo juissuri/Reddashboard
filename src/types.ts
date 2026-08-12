@@ -7,18 +7,19 @@ export interface TaskItem {
 	folderId: string;
 	subProject: string | null;
 	text: string;
-	deadline: string | null; // ISO date string (yyyy-mm-dd)
+	deadline: string | null; 
 	priority: Priority;
 	column: ColumnId;
-	completedDate: string | null; // ISO date string, set when moved to Done
-	createdDate: string; // ISO date string
-	order: number; // manual sort position within its column
+	completedDate: string | null; 
+	createdDate: string; 
+	order: number; 
 }
 
 export interface FolderDef {
 	id: string;
 	name: string;
-	icon: string; // lucide icon id
+	description: string;
+	icon: string; 
 	subProjects: string[];
 }
 

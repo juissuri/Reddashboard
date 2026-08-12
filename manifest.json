@@ -1,7 +1,7 @@
 {
-  "id": "neon-daily-dashboard",
-  "name": "Neon Daily Dashboard",
-  "version": "1.0.0",
+  "id": "reddashboard",
+  "name": "Reddashboard",
+  "version": "1.0.1",
   "minAppVersion": "1.4.0",
   "description": "A cyberpunk-styled daily task dashboard with kanban boards, deadlines, priorities and progress charts. Desktop only.",
   "author": "JUI SSURI",

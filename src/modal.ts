@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
-import { Priority, TaskItem } from "./types";
+import { Priority, TaskItem, FolderDef } from "./types";
 
 interface TaskModalOptions {
 	task: TaskItem;
@@ -8,7 +8,6 @@ interface TaskModalOptions {
 	onDelete: (task: TaskItem) => void;
 }
 
-/** Edit modal for a single task. Scales up visually from the card that opened it. */
 export class TaskEditModal extends Modal {
 	private opts: TaskModalOptions;
 	private draft: TaskItem;
@@ -23,8 +22,6 @@ export class TaskEditModal extends Modal {
 		const { contentEl, modalEl } = this;
 		modalEl.addClass("ndd-modal");
 
-		// Scale-up-from-card entrance: position the transform-origin near the
-		// clicked card, then let the CSS keyframe take over.
 		const origin = this.opts.originEl?.getBoundingClientRect();
 		if (origin) {
 			const cx = ((origin.left + origin.width / 2) / window.innerWidth) * 100;
@@ -61,23 +58,84 @@ export class TaskEditModal extends Modal {
 		});
 
 		const btnRow = contentEl.createDiv({ cls: "ndd-modal-actions" });
-
-		const deleteBtn = btnRow.createEl("button", {
-			text: "Delete task",
-			cls: "ndd-btn ndd-btn-ghost-danger",
-		});
+		const deleteBtn = btnRow.createEl("button", { text: "Delete task", cls: "ndd-btn ndd-btn-ghost-danger" });
 		deleteBtn.addEventListener("click", () => {
 			this.opts.onDelete(this.opts.task);
 			this.close();
 		});
 
-		const saveBtn = btnRow.createEl("button", {
-			text: "Save changes",
-			cls: "ndd-btn ndd-btn-primary",
-		});
+		const saveBtn = btnRow.createEl("button", { text: "Save changes", cls: "ndd-btn ndd-btn-primary" });
 		saveBtn.addEventListener("click", () => {
 			if (!this.draft.text.trim()) {
 				textInput.focus();
+				return;
+			}
+			this.opts.onSave(this.draft);
+			this.close();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+interface FolderModalOptions {
+	folder: FolderDef;
+	isNew: boolean;
+	onSave: (updated: FolderDef) => void;
+	onDelete: (folder: FolderDef) => void;
+}
+
+export class FolderEditModal extends Modal {
+	private opts: FolderModalOptions;
+	private draft: FolderDef;
+
+	constructor(app: App, opts: FolderModalOptions) {
+		super(app);
+		this.opts = opts;
+		this.draft = { ...opts.folder };
+	}
+
+	onOpen(): void {
+		const { contentEl, modalEl } = this;
+		modalEl.addClass("ndd-modal", "ndd-modal-enter");
+
+		contentEl.createEl("h2", { text: this.opts.isNew ? "Create Folder" : "Edit Folder", cls: "ndd-modal-title" });
+
+		let nameInput: HTMLInputElement;
+		new Setting(contentEl).setName("Name").addText(t => {
+			nameInput = t.inputEl;
+			t.setValue(this.draft.name);
+			t.onChange(v => this.draft.name = v);
+		});
+
+		new Setting(contentEl).setName("Description").addTextArea(ta => {
+			ta.inputEl.rows = 2;
+			ta.setValue(this.draft.description);
+			ta.onChange(v => this.draft.description = v);
+		});
+
+		new Setting(contentEl).setName("Icon (Lucide)").addText(t => {
+			t.setValue(this.draft.icon);
+			t.onChange(v => this.draft.icon = v || "folder");
+		});
+
+		const btnRow = contentEl.createDiv({ cls: "ndd-modal-actions" });
+		if (!this.opts.isNew) {
+			const deleteBtn = btnRow.createEl("button", { text: "Delete", cls: "ndd-btn ndd-btn-ghost-danger" });
+			deleteBtn.addEventListener("click", () => {
+				this.opts.onDelete(this.opts.folder);
+				this.close();
+			});
+		} else {
+			btnRow.createDiv();
+		}
+
+		const saveBtn = btnRow.createEl("button", { text: "Save folder", cls: "ndd-btn ndd-btn-primary" });
+		saveBtn.addEventListener("click", () => {
+			if (!this.draft.name.trim()) {
+				nameInput.focus();
 				return;
 			}
 			this.opts.onSave(this.draft);

@@ -3,11 +3,11 @@ import { COLUMNS, ColumnId, FolderDef, TaskItem } from "./types";
 import { formatDeadline, isOverdue, isoToday, uid } from "./data";
 
 export interface KanbanCallbacks {
-	onTasksChanged: () => void; // persist + refresh charts
+	onTasksChanged: () => void; 
+	onTaskCreated: (task: TaskItem) => void; 
 	onOpenTask: (task: TaskItem, cardEl: HTMLElement) => void;
 }
 
-/** Renders and wires up the full 4-column kanban board for one folder. */
 export class KanbanBoard {
 	private containerEl: HTMLElement;
 	private folder: FolderDef;
@@ -61,7 +61,6 @@ export class KanbanBoard {
 				if (!text) return;
 				this.createTask(text, col.id);
 				input.value = "";
-				this.render();
 			};
 			addBtn.addEventListener("click", submit);
 			input.addEventListener("keydown", (e) => {
@@ -89,8 +88,7 @@ export class KanbanBoard {
 			createdDate: isoToday(),
 			order: Date.now(),
 		};
-		this.tasks.push(newTask);
-		this.cb.onTasksChanged();
+		this.cb.onTaskCreated(newTask);
 	}
 
 	private renderCard(task: TaskItem): HTMLElement {
@@ -103,7 +101,16 @@ export class KanbanBoard {
 		priorityTag.setAttr("aria-label", `${task.priority} priority`);
 
 		const body = card.createDiv({ cls: "ndd-card-body" });
-		body.createDiv({ cls: "ndd-card-text", text: task.text });
+		const textDiv = body.createDiv({ cls: "ndd-card-text" });
+		
+		const words = task.text.split(/(#[^\s#]+)/g);
+		for (const w of words) {
+			if (w.startsWith("#")) {
+				textDiv.createSpan({ cls: "ndd-hashtag", text: w });
+			} else {
+				textDiv.appendChild(document.createTextNode(w));
+			}
+		}
 
 		if (task.subProject) {
 			body.createDiv({ cls: "ndd-card-subproject", text: task.subProject });
@@ -143,8 +150,6 @@ export class KanbanBoard {
 			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
 			list.addClass("ndd-dropzone-active");
 
-			// Fluid reordering: move the dragged card's DOM node to sit right
-			// before the card whose midpoint the cursor has passed.
 			const draggingEl = list.ownerDocument.querySelector(".ndd-dragging") as HTMLElement | null;
 			if (!draggingEl) return;
 			const siblings = Array.from(list.querySelectorAll(".ndd-card:not(.ndd-dragging)")) as HTMLElement[];
@@ -189,8 +194,6 @@ export class KanbanBoard {
 				task.completedDate = null;
 			}
 
-			// Re-derive order for every card in this column from the DOM order
-			// the fluid-reorder step above already produced.
 			const orderedIds = Array.from(list.querySelectorAll(".ndd-card")).map((el) =>
 				el.getAttribute("data-task-id")
 			);
@@ -204,7 +207,6 @@ export class KanbanBoard {
 		});
 	}
 
-	/** Small red ripple that expands outward from the drop point. */
 	private spawnRipple(list: HTMLElement, clientX: number, clientY: number): void {
 		const box = list.getBoundingClientRect();
 		const ripple = document.createElement("div");

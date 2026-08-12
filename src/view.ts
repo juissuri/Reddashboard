@@ -1,10 +1,10 @@
 import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import type NeonDashboardPlugin from "../main";
 import { FolderDef, TaskItem } from "./types";
-import { isoToday } from "./data";
+import { isoToday, uid } from "./data";
 import { KanbanBoard } from "./kanban";
-import { TaskEditModal } from "./modal";
-import { renderCircularProgress, renderHorizontalBars, renderWeeklyTrend, withSkeleton } from "./charts";
+import { TaskEditModal, FolderEditModal } from "./modal";
+import { renderHorizontalBars, renderWeeklyTrend, withSkeleton } from "./charts";
 
 export const VIEW_TYPE_NEON_DASHBOARD = "neon-daily-dashboard-view";
 
@@ -25,7 +25,7 @@ export class DashboardView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return "Neon Daily Dashboard";
+		return "Reddashboard";
 	}
 
 	getIcon(): string {
@@ -49,8 +49,6 @@ export class DashboardView extends ItemView {
 		void this.plugin.savePluginData();
 	}
 
-	// ---------------------------------------------------------------- render
-
 	render(): void {
 		const root = this.contentEl;
 		root.empty();
@@ -71,15 +69,17 @@ export class DashboardView extends ItemView {
 
 	private renderFolderGrid(root: HTMLElement): void {
 		const header = root.createDiv({ cls: "ndd-page-header" });
-		const titleWrap = header.createDiv();
-		titleWrap.createEl("h1", { text: "Daily Dashboard", cls: "ndd-page-title" });
-		titleWrap.createDiv({
+		
+		const titleWrap = header.createDiv({ cls: "ndd-title-group" });
+		titleWrap.createEl("h1", { text: "Reddashboard", cls: "ndd-page-title" });
+		
+		const addBtn = titleWrap.createEl("button", { cls: "ndd-icon-btn", attr: { "aria-label": "Add new folder" }});
+		setIcon(addBtn, "folder-plus");
+		addBtn.addEventListener("click", () => this.openFolderModal());
+
+		header.createDiv({
 			cls: "ndd-page-subtitle",
-			text: new Date().toLocaleDateString(undefined, {
-				weekday: "long",
-				day: "numeric",
-				month: "long",
-			}),
+			text: new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
 		});
 
 		const grid = root.createDiv({ cls: "ndd-folder-grid" });
@@ -101,6 +101,11 @@ export class DashboardView extends ItemView {
 		setIcon(iconWrap, folder.icon);
 
 		card.createDiv({ cls: "ndd-folder-name", text: folder.name });
+		
+		if (folder.description) {
+			card.createDiv({ cls: "ndd-folder-desc", text: folder.description });
+		}
+
 		const meta = card.createDiv({ cls: "ndd-folder-meta" });
 		meta.createSpan({ text: `${pending} open` });
 		if (doneToday > 0) {
@@ -125,6 +130,39 @@ export class DashboardView extends ItemView {
 		this.render();
 	}
 
+	private openFolderModal(existingFolder?: FolderDef): void {
+		const isNew = !existingFolder;
+		const folder: FolderDef = existingFolder ? { ...existingFolder } : {
+			id: uid(),
+			name: "New Folder",
+			description: "",
+			icon: "folder",
+			subProjects: []
+		};
+
+		new FolderEditModal(this.app, {
+			folder,
+			isNew,
+			onSave: (updated) => {
+				if (isNew) {
+					this.data.folders.push(updated);
+				} else {
+					const idx = this.data.folders.findIndex(f => f.id === updated.id);
+					if (idx >= 0) this.data.folders[idx] = updated;
+				}
+				this.persist();
+				this.render();
+			},
+			onDelete: (toDelete) => {
+				this.data.folders = this.data.folders.filter(f => f.id !== toDelete.id);
+				this.data.tasks = this.data.tasks.filter(t => t.folderId !== toDelete.id);
+				this.currentFolderId = null;
+				this.persist();
+				this.render();
+			}
+		}).open();
+	}
+
 	private renderWorkspace(root: HTMLElement, folder: FolderDef): void {
 		const workspace = root.createDiv({ cls: "ndd-workspace ndd-enter" });
 
@@ -140,53 +178,54 @@ export class DashboardView extends ItemView {
 		const titleRow = workspace.createDiv({ cls: "ndd-workspace-title-row" });
 		const iconWrap = titleRow.createDiv({ cls: "ndd-workspace-icon" });
 		setIcon(iconWrap, folder.icon);
-		titleRow.createEl("h1", { text: folder.name, cls: "ndd-page-title" });
+		
+		const titleGroup = titleRow.createDiv({ cls: "ndd-title-group" });
+		titleGroup.createEl("h1", { text: folder.name, cls: "ndd-page-title" });
+		
+		const editBtn = titleGroup.createEl("button", { cls: "ndd-icon-btn" });
+		setIcon(editBtn, "pencil");
+		editBtn.addEventListener("click", () => this.openFolderModal(folder));
 
-		// --- charts row --------------------------------------------------
+		if (folder.description) {
+			const descText = workspace.createDiv({ cls: "ndd-folder-desc" });
+			const words = folder.description.split(/(#[^\s#]+)/g);
+			for (const w of words) {
+				if (w.startsWith("#")) descText.createSpan({ cls: "ndd-hashtag", text: w });
+				else descText.appendChild(document.createTextNode(w));
+			}
+		}
+
 		const chartsRow = workspace.createDiv({ cls: "ndd-charts-row" });
-
-		const circCard = chartsRow.createDiv({ cls: "ndd-chart-card" });
-		circCard.createDiv({ cls: "ndd-chart-card-title", text: "Today" });
-		const circBody = circCard.createDiv({ cls: "ndd-chart-card-body" });
-
 		const barsCard = chartsRow.createDiv({ cls: "ndd-chart-card" });
 		barsCard.createDiv({ cls: "ndd-chart-card-title", text: "Sub-projects" });
 		const barsBody = barsCard.createDiv({ cls: "ndd-chart-card-body" });
 
-		const trendCard = chartsRow.createDiv({ cls: "ndd-chart-card ndd-chart-card-wide" });
+		const trendCard = chartsRow.createDiv({ cls: "ndd-chart-card" });
 		trendCard.createDiv({ cls: "ndd-chart-card-title", text: "Last 7 days" });
 		const trendBody = trendCard.createDiv({ cls: "ndd-chart-card-body" });
 
-		this.mountCharts(folder, circBody, barsBody, trendBody);
+		this.mountCharts(folder, barsBody, trendBody);
 
-		// --- kanban board --------------------------------------------------
 		const boardHost = workspace.createDiv({ cls: "ndd-board-host" });
 		const folderTasks = this.data.tasks.filter((t) => t.folderId === folder.id);
 		this.kanban = new KanbanBoard(boardHost, folder, folderTasks, {
 			onTasksChanged: () => {
 				this.persist();
-				this.mountCharts(folder, circBody, barsBody, trendBody);
-				this.refreshFolderCardsIfVisible();
+				this.mountCharts(folder, barsBody, trendBody);
 			},
-			onOpenTask: (task, cardEl) => this.openTaskModal(task, cardEl, folder, circBody, barsBody, trendBody),
+			onTaskCreated: (task) => {
+				this.data.tasks.push(task);
+				this.persist();
+				this.kanban?.updateTasks(this.data.tasks.filter((t) => t.folderId === folder.id));
+				this.mountCharts(folder, barsBody, trendBody);
+			},
+			onOpenTask: (task, cardEl) => this.openTaskModal(task, cardEl, folder, barsBody, trendBody),
 		});
 		this.kanban.render();
 	}
 
-	private mountCharts(
-		folder: FolderDef,
-		circBody: HTMLElement,
-		barsBody: HTMLElement,
-		trendBody: HTMLElement
-	): void {
+	private mountCharts(folder: FolderDef, barsBody: HTMLElement, trendBody: HTMLElement): void {
 		const tasks = this.data.tasks.filter((t) => t.folderId === folder.id);
-
-		withSkeleton(circBody, "circle", () => {
-			const total = tasks.length;
-			const doneToday = tasks.filter((t) => t.completedDate === isoToday()).length;
-			const percent = total === 0 ? 0 : Math.round((tasks.filter((t) => t.column === "done").length / total) * 100);
-			renderCircularProgress(circBody, percent, doneToday, total);
-		});
 
 		withSkeleton(barsBody, "bars", () => {
 			const bars = folder.subProjects.map((sp) => {
@@ -211,18 +250,9 @@ export class DashboardView extends ItemView {
 		});
 	}
 
-	private refreshFolderCardsIfVisible(): void {
-		// Only relevant if we later add a live summary while a folder is open;
-		// kept as a hook so folder-grid counts stay correct when reopened.
-	}
-
 	private openTaskModal(
-		task: TaskItem,
-		cardEl: HTMLElement,
-		folder: FolderDef,
-		circBody: HTMLElement,
-		barsBody: HTMLElement,
-		trendBody: HTMLElement
+		task: TaskItem, cardEl: HTMLElement, folder: FolderDef,
+		barsBody: HTMLElement, trendBody: HTMLElement
 	): void {
 		new TaskEditModal(this.app, {
 			task,
@@ -232,13 +262,13 @@ export class DashboardView extends ItemView {
 				if (idx >= 0) this.data.tasks[idx] = updated;
 				this.persist();
 				this.kanban?.updateTasks(this.data.tasks.filter((t) => t.folderId === folder.id));
-				this.mountCharts(folder, circBody, barsBody, trendBody);
+				this.mountCharts(folder, barsBody, trendBody);
 			},
 			onDelete: (toDelete) => {
 				this.data.tasks = this.data.tasks.filter((t) => t.id !== toDelete.id);
 				this.persist();
 				this.kanban?.updateTasks(this.data.tasks.filter((t) => t.folderId === folder.id));
-				this.mountCharts(folder, circBody, barsBody, trendBody);
+				this.mountCharts(folder, barsBody, trendBody);
 			},
 		}).open();
 	}
