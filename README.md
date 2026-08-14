@@ -1,4 +1,4 @@
-# Reddashboard 🔴🖤
+# Reddashboard 🔴
 
 **Reddashboard** is a sleek, dark-themed command center and Kanban-style project management plugin designed for Obsidian. Built with a striking red-and-black aesthetic, it helps you structure complex creative pipelines, track daily progress, and stay laser-focused on your goals.
 
